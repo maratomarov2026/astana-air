@@ -1,0 +1,105 @@
+<!doctype html>
+<html lang="ru">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+  <meta name="color-scheme" content="light dark">
+  <title>Воздух Астаны</title>
+  <meta name="description" content="Качество воздуха в Астане сейчас, прогноз на два дня и лучшее время для прогулки.">
+  <link rel="stylesheet" href="/style.css">
+  <script src="/app.js" defer></script>
+</head>
+<body>
+  <main class="wrap">
+    <header class="top banner">
+      <h1>Воздух Астаны</h1>
+      <p id="updated" class="muted" role="status" aria-live="polite">Загружаем данные…</p>
+    </header>
+
+    <p id="stale" class="notice" hidden>Источник сейчас недоступен. Показаны последние сохранённые данные.</p>
+
+    <section id="error" class="card error" hidden>
+      <h2>Не удалось получить данные</h2>
+      <p>Источник данных не ответил. Подождите минуту и попробуйте ещё раз.</p>
+      <button id="retry" type="button">Повторить</button>
+    </section>
+
+    <div id="content" hidden>
+      <section class="card hero" id="hero" data-cat="0" aria-labelledby="now-title">
+        <svg class="skyline" viewBox="0 0 400 160" preserveAspectRatio="xMidYMax slice" aria-hidden="true" focusable="false">
+          <defs>
+            <filter id="blur" x="-5%" y="-5%" width="110%" height="110%"><feGaussianBlur id="blurNode" stdDeviation="0"/></filter>
+          </defs>
+          <rect class="sky" width="400" height="160"/>
+          <g id="city" filter="url(#blur)" class="city">
+            <!-- Акорда -->
+            <rect x="20" y="108" width="70" height="52"/>
+            <rect x="34" y="96" width="42" height="14"/>
+            <path d="M42 96 Q55 74 68 96Z"/>
+            <rect x="54" y="62" width="2" height="14"/>
+            <!-- Байтерек -->
+            <rect x="152" y="70" width="4" height="90"/>
+            <path d="M144 160 L154 96 L164 160Z"/>
+            <circle cx="154" cy="62" r="16"/>
+            <!-- Хан Шатыр -->
+            <path d="M232 160 L300 40 L368 160Z"/>
+            <rect x="298" y="20" width="4" height="24"/>
+            <!-- здания -->
+            <rect x="196" y="116" width="26" height="44"/>
+            <rect x="372" y="104" width="28" height="56"/>
+          </g>
+          <rect id="haze" class="haze" width="400" height="160"/>
+        </svg>
+        <div class="hero-body">
+          <h2 id="now-title" class="muted">Индекс качества воздуха (US AQI)</h2>
+          <div class="aqi-row">
+            <span id="aqi" class="aqi">–</span>
+            <span id="cat" class="cat">–</span>
+          </div>
+          <p id="advice" class="advice"></p>
+        </div>
+      </section>
+
+      <section class="card" aria-labelledby="metrics-title">
+        <h2 id="metrics-title">Что в воздухе, мкг/м³</h2>
+        <dl id="metrics" class="metrics"></dl>
+      </section>
+
+      <section class="card" aria-labelledby="chart-title">
+        <h2 id="chart-title">Динамика и прогноз</h2>
+        <p class="muted small">3 суток назад и 2 суток вперёд. Сплошная линия — было, пунктир — прогноз.</p>
+        <div class="chart-scroll"><div id="chart" class="chart"></div></div>
+        <p id="tip" class="tip" aria-live="polite">Проведите пальцем или мышью по графику, чтобы увидеть значение.</p>
+      </section>
+
+      <section class="card" aria-labelledby="best-title">
+        <h2 id="best-title">Лучшее время для прогулки</h2>
+        <p id="best" class="best"></p>
+        <p class="muted small">Ищем самый чистый час в ближайшие 24 часа между 07:00 и 21:00.</p>
+      </section>
+
+      <section class="card" aria-labelledby="scale-title">
+        <h2 id="scale-title">Что значит индекс</h2>
+        <ol id="scale" class="scale"></ol>
+        <p class="muted small">Для сравнения, ориентиры ВОЗ (2021) для PM2.5: 15 мкг/м³ за сутки и 5 мкг/м³ в среднем за год.</p>
+      </section>
+    </div>
+
+    <section class="card" aria-labelledby="src-title">
+      <h2 id="src-title">Откуда данные</h2>
+      <p>Данные берутся из модели атмосферного состава CAMS через Open-Meteo. Это <strong>модельный расчёт</strong> для района города, а не показание датчика. Значения могут отличаться от IQAir, AQICN и постов Казгидромета.</p>
+      <p>Сравните с другими источниками:</p>
+      <ul class="links">
+        <li><a href="https://aqicn.org/city/astana/" rel="noopener noreferrer">AQICN</a></li>
+        <li><a href="https://www.iqair.com/kazakhstan/astana" rel="noopener noreferrer">IQAir</a></li>
+        <li><a href="https://yandex.kz/pogoda/astana" rel="noopener noreferrer">Яндекс Погода</a></li>
+        <li><a href="https://www.kazhydromet.kz/ru/ecology/ezhednevnyy-ekologicheskiy-byulleten" rel="noopener noreferrer">Казгидромет</a></li>
+      </ul>
+    </section>
+
+    <footer class="foot muted small">
+      <p>Страница носит справочный характер и не заменяет консультацию врача. Если вы плохо себя чувствуете, обратитесь к специалисту.</p>
+    </footer>
+  </main>
+</body>
+</html>

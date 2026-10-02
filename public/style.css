@@ -1,0 +1,179 @@
+:root {
+  --bg: #ff3d81;
+  --card: #ffffff;
+  --text: #000000;
+  --muted: #2b2b2b;
+  --line: #000000;
+  --focus: #ff0055;
+  --accent: #0033ff;
+  --c0: #008a2e;
+  --c1: #4d8f00;
+  --c2: #e55300;
+  --c3: #e6002b;
+  --c4: #8a00e6;
+  --c5: #8a0030;
+  --sky-top: #0033ff;
+  --sky-bot: #00c2ff;
+  --city: #000000;
+  --haze: #ff5a00;
+  --band: 0.3;
+}
+
+@media (prefers-color-scheme: dark) {
+  :root {
+    --bg: #000000;
+    --card: #0d0d0d;
+    --text: #ffffff;
+    --muted: #d6d6d6;
+    --line: #ffffff;
+    --focus: #ff3d81;
+    --accent: #00f0ff;
+    --c0: #00ff6a;
+    --c1: #b6ff00;
+    --c2: #ff8c00;
+    --c3: #ff2b4d;
+    --c4: #d44dff;
+    --c5: #ff4d9a;
+    --sky-top: #3a00ff;
+    --sky-bot: #ff00aa;
+    --city: #000000;
+    --haze: #ff7a00;
+    --band: 0.4;
+  }
+}
+
+* { box-sizing: border-box; }
+
+html { -webkit-text-size-adjust: 100%; }
+
+body {
+  margin: 0;
+  background: var(--bg);
+  color: var(--text);
+  font: 16px/1.5 system-ui, -apple-system, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
+  padding: env(safe-area-inset-top) env(safe-area-inset-right) env(safe-area-inset-bottom) env(safe-area-inset-left);
+}
+
+.wrap { max-width: 760px; margin: 0 auto; padding: 16px 14px 40px; }
+
+h1 { font-size: 1.5rem; margin: 0; }
+h2 { font-size: 1.05rem; margin: 0 0 10px; }
+p { margin: 0 0 10px; }
+
+.top { margin-bottom: 20px; }
+.banner {
+  display: flex;
+  flex-direction: column;
+  justify-content: flex-end;
+  min-height: 220px;
+  padding: 16px;
+  border: 3px solid var(--line);
+  border-radius: 4px;
+  box-shadow: 6px 6px 0 var(--line);
+  background: linear-gradient(180deg, rgba(0, 0, 0, 0) 30%, rgba(0, 0, 0, 0.75)), linear-gradient(135deg, var(--sky-top), var(--sky-bot));
+  background: linear-gradient(180deg, rgba(0, 0, 0, 0) 30%, rgba(0, 0, 0, 0.75)), url("/astana.jpg") center / cover no-repeat, linear-gradient(135deg, var(--sky-top), var(--sky-bot));
+  color: #fff;
+}
+.banner h1 { font-size: 2rem; text-shadow: 0 2px 6px rgba(0, 0, 0, 0.6); }
+.banner .muted { color: #fff; margin: 4px 0 0; text-shadow: 0 1px 4px rgba(0, 0, 0, 0.7); }
+.muted { color: var(--muted); }
+.small { font-size: 0.875rem; }
+
+.card {
+  background: var(--card);
+  border: 3px solid var(--line);
+  border-radius: 4px;
+  box-shadow: 6px 6px 0 var(--line);
+  padding: 16px;
+  margin-bottom: 20px;
+  overflow: hidden;
+}
+
+.notice {
+  background: var(--card);
+  border: 1px solid var(--c2);
+  border-left-width: 5px;
+  border-radius: 10px;
+  padding: 10px 14px;
+  margin-bottom: 14px;
+}
+
+.error button, button {
+  font: inherit;
+  background: var(--accent);
+  color: #fff;
+  border: 0;
+  border-radius: 10px;
+  padding: 10px 18px;
+  cursor: pointer;
+}
+@media (prefers-color-scheme: dark) { button { color: #0b1118; } }
+
+:focus-visible { outline: 3px solid var(--focus); outline-offset: 2px; }
+
+/* категории */
+[data-cat="0"] { --cat: var(--c0); }
+[data-cat="1"] { --cat: var(--c1); }
+[data-cat="2"] { --cat: var(--c2); }
+[data-cat="3"] { --cat: var(--c3); }
+[data-cat="4"] { --cat: var(--c4); }
+[data-cat="5"] { --cat: var(--c5); }
+
+/* главный блок */
+.hero { padding: 0; }
+.skyline { display: block; width: 100%; height: 170px; }
+.sky { fill: var(--sky-bot); }
+.city { fill: var(--city); }
+.haze { fill: var(--haze); opacity: 0; transition: opacity 0.8s; }
+.hero-body { padding: 14px 16px 16px; border-top: 4px solid var(--cat); }
+.hero-body h2 { margin-bottom: 4px; font-weight: 500; }
+.aqi-row { display: flex; align-items: baseline; gap: 14px; flex-wrap: wrap; }
+.aqi { font-size: 4rem; line-height: 1; font-weight: 700; color: var(--cat); }
+.cat { font-size: 1.35rem; font-weight: 600; }
+.advice { margin: 8px 0 0; font-size: 1.05rem; }
+
+/* показатели */
+.metrics { display: grid; grid-template-columns: repeat(3, 1fr); gap: 10px; margin: 0; }
+.metrics div { background: var(--bg); border-radius: 10px; padding: 10px; min-width: 0; }
+.metrics dt { color: var(--muted); font-size: 0.85rem; }
+.metrics dd { margin: 0; font-size: 1.3rem; font-weight: 600; }
+@media (max-width: 420px) { .metrics { grid-template-columns: repeat(2, 1fr); } }
+
+/* график */
+.chart-scroll { overflow-x: auto; -webkit-overflow-scrolling: touch; margin: 0 -4px; padding: 0 4px; }
+.chart { min-width: 720px; }
+.chart svg { display: block; width: 100%; height: auto; touch-action: pan-y; }
+.chart svg:focus-visible { outline-offset: -2px; }
+.chart .band { opacity: var(--band); fill: var(--cat); }
+.chart .axis { stroke: var(--line); stroke-width: 1; }
+.chart text { fill: var(--muted); font-size: 11px; font-family: inherit; }
+.chart .line { fill: none; stroke: var(--text); stroke-width: 2.2; stroke-linejoin: round; stroke-linecap: round; }
+.chart .line.fut { stroke-dasharray: 6 5; }
+.chart .nowline { stroke: var(--accent); stroke-width: 1.5; }
+.chart .nowdot, .chart .hoverdot { fill: var(--card); stroke: var(--text); stroke-width: 2.5; }
+.chart .hoverline { stroke: var(--muted); stroke-width: 1; stroke-dasharray: 3 3; }
+.tip { min-height: 3em; margin: 10px 0 0; padding: 8px 10px; background: var(--bg); border-radius: 10px; }
+
+/* лучшее время */
+.best { font-size: 1.15rem; font-weight: 600; }
+
+/* шкала */
+.scale { list-style: none; margin: 0 0 10px; padding: 0; display: grid; gap: 8px; }
+.scale li {
+  border: 1px solid var(--line);
+  border-left: 6px solid var(--cat);
+  border-radius: 10px;
+  padding: 8px 12px;
+}
+.scale li[aria-current="true"] { background: var(--bg); outline: 2px solid var(--cat); }
+.scale b { display: block; }
+.scale span { color: var(--muted); font-size: 0.9rem; }
+
+.links { margin: 0; padding-left: 20px; }
+.links a { color: var(--accent); }
+
+.foot { margin-top: 8px; }
+
+@media (prefers-reduced-motion: reduce) {
+  * { transition: none !important; animation: none !important; scroll-behavior: auto !important; }
+}

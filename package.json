@@ -1,0 +1,12 @@
+{
+  "name": "astana-air",
+  "version": "1.0.0",
+  "description": "Воздух Астаны: сайт о качестве воздуха",
+  "private": true,
+  "main": "server.js",
+  "engines": { "node": ">=18" },
+  "scripts": {
+    "start": "node server.js",
+    "test": "node --test test/server.test.js"
+  }
+}
