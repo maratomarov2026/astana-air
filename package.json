@@ -1,12 +1,15 @@
 {
-  "name": "astana-air",
+  "name": "astana-air-project",
   "version": "1.0.0",
-  "description": "Воздух Астаны: сайт о качестве воздуха",
-  "private": true,
+  "description": "Воздух Астаны — сайт о качестве воздуха в Астане",
   "main": "server.js",
-  "engines": { "node": ">=18" },
   "scripts": {
     "start": "node server.js",
     "test": "node --test test/server.test.js"
-  }
+  },
+  "engines": {
+    "node": ">=18"
+  },
+  "license": "MIT",
+  "private": true
 }

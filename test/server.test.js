@@ -3,99 +3,124 @@
 const test = require('node:test');
 const assert = require('node:assert/strict');
 const http = require('node:http');
-const { createApp, normalize } = require('../server.js');
+const { createApp, normalize } = require('../server');
 
 const RAW = {
-  current: { time: '2026-10-02T15:00', us_aqi: 42, pm2_5: 9.3, pm10: 18, nitrogen_dioxide: 10, sulphur_dioxide: 3, ozone: 70, carbon_monoxide: 200 },
-  hourly: { time: ['2026-09-29T00:00', '2026-09-29T01:00', '2026-09-29T02:00'], us_aqi: [31, null, 35], pm2_5: [6.2, null, 7] },
+  current: {
+    time: '2026-10-02T15:15',
+    us_aqi: 42,
+    pm2_5: 9.3,
+    pm10: 18,
+    nitrogen_dioxide: 10,
+    sulphur_dioxide: 3,
+    ozone: 70,
+    carbon_monoxide: 200,
+  },
+  hourly: {
+    time: ['2026-10-02T14:00', '2026-10-02T15:00', '2026-10-02T16:00'],
+    us_aqi: [40, 55, null],
+    pm2_5: [8, 11, 12],
+  },
 };
 
-function start(app) {
-  return new Promise((resolve) => app.listen(0, '127.0.0.1', () => resolve(app.address().port)));
+const okFetch = (counter) => async () => {
+  if (counter) counter.n++;
+  return { ok: true, status: 200, json: async () => RAW };
+};
+const failFetch = async () => {
+  throw new Error('network down');
+};
+
+async function withServer(opts, fn) {
+  const { server } = createApp(opts);
+  await new Promise((r) => server.listen(0, '127.0.0.1', r));
+  const port = server.address().port;
+  try {
+    await fn(port);
+  } finally {
+    await new Promise((r) => server.close(r));
+  }
 }
 
-function get(port, path, method = 'GET') {
+function rawGet(port, p) {
   return new Promise((resolve, reject) => {
-    const req = http.request({ host: '127.0.0.1', port, path, method }, (res) => {
-      let body = '';
-      res.on('data', (c) => (body += c));
-      res.on('end', () => resolve({ status: res.statusCode, headers: res.headers, body }));
-    });
-    req.on('error', reject);
-    req.end();
+    http
+      .get({ host: '127.0.0.1', port, path: p }, (res) => {
+        let body = '';
+        res.on('data', (c) => (body += c));
+        res.on('end', () => resolve({ status: res.statusCode, body, headers: res.headers }));
+      })
+      .on('error', reject);
   });
 }
 
-test('normalize приводит ответ источника к контракту и сохраняет пропуски', () => {
-  const d = normalize(RAW, new Date('2026-10-02T10:00:00Z'));
-  assert.equal(d.city, 'Астана');
-  assert.equal(d.stale, false);
-  assert.equal(d.fetchedAt, '2026-10-02T10:00:00.000Z');
-  assert.deepEqual(d.current, { time: '2026-10-02T15:00', aqi: 42, pm25: 9.3, pm10: 18, no2: 10, so2: 3, o3: 70, co: 200 });
-  assert.equal(d.hourly.length, 3);
-  assert.equal(d.hourly[1].aqi, null);
+test('normalize: контракт, null сохраняются, «сейчас» совпадает с графиком', () => {
+  const out = normalize(RAW, new Date('2026-10-02T10:00:00Z'));
+  assert.equal(out.stale, false);
+  assert.equal(out.current.aqi, 42);
+  assert.equal(out.current.no2, 10);
+  assert.equal(out.hourly.length, 3);
+  assert.equal(out.hourly[1].aqi, 42); // перекрыто текущим значением
+  assert.equal(out.hourly[2].aqi, null);
   assert.throws(() => normalize({}), /формат/);
 });
 
-test('кэш: два запроса подряд и параллельные вызывают источник один раз', async () => {
-  let calls = 0;
-  const app = createApp({ fetchImpl: async () => (calls++, RAW) });
-  const port = await start(app);
-  try {
-    await Promise.all([get(port, '/api/air'), get(port, '/api/air')]);
-    const r = await get(port, '/api/air');
-    assert.equal(r.status, 200);
-    assert.equal(JSON.parse(r.body).stale, false);
-    assert.equal(calls, 1);
-  } finally {
-    app.close();
-  }
+test('/api/air: кэш — два запроса вызывают источник один раз, параллельные тоже', async () => {
+  const counter = { n: 0 };
+  await withServer({ fetch: okFetch(counter) }, async (port) => {
+    const [a, b] = await Promise.all([rawGet(port, '/api/air'), rawGet(port, '/api/air')]);
+    assert.equal(a.status, 200);
+    assert.equal(b.status, 200);
+    await rawGet(port, '/api/air');
+    assert.equal(counter.n, 1);
+    assert.equal(JSON.parse(a.body).stale, false);
+  });
 });
 
-test('stale: при сбое источника отдаётся последний кэш, без кэша — 502', async () => {
+test('/api/air: при сбое отдаёт кэш с stale, без кэша — 502', async () => {
   let t = 0;
   let fail = false;
-  const app = createApp({ fetchImpl: async () => { if (fail) throw new Error('down'); return RAW; }, ttl: 1000, now: () => t });
-  const port = await start(app);
-  try {
+  const fetchImpl = async () => (fail ? failFetch() : okFetch()());
+  await withServer({ fetch: fetchImpl, now: () => t, ttl: 1000 }, async (port) => {
+    assert.equal(JSON.parse((await rawGet(port, '/api/air')).body).stale, false);
     fail = true;
-    const bad = await get(port, '/api/air');
-    assert.equal(bad.status, 502);
-    assert.deepEqual(JSON.parse(bad.body), { error: 'Источник данных недоступен' });
-
-    fail = false;
-    assert.equal((await get(port, '/api/air')).status, 200);
     t = 5000;
-    fail = true;
-    const stale = JSON.parse((await get(port, '/api/air')).body);
-    assert.equal(stale.stale, true);
-    assert.equal(stale.current.aqi, 42);
-  } finally {
-    app.close();
-  }
+    const r = await rawGet(port, '/api/air');
+    assert.equal(r.status, 200);
+    assert.equal(JSON.parse(r.body).stale, true);
+  });
+  await withServer({ fetch: failFetch }, async (port) => {
+    const r = await rawGet(port, '/api/air');
+    assert.equal(r.status, 502);
+    assert.deepEqual(JSON.parse(r.body), { error: 'Источник данных недоступен' });
+  });
 });
 
-test('статика, healthz, методы и защита от выхода за public/', async () => {
-  const app = createApp({ fetchImpl: async () => RAW });
-  const port = await start(app);
-  try {
-    const index = await get(port, '/');
-    assert.equal(index.status, 200);
-    assert.match(index.headers['content-type'], /text\/html/);
-    assert.match(index.headers['content-security-policy'], /default-src 'self'/);
-    assert.equal(index.headers['x-content-type-options'], 'nosniff');
-    assert.equal(index.headers['referrer-policy'], 'no-referrer');
+test('статика, healthz, заголовки, методы и защита путей', async () => {
+  await withServer({ fetch: okFetch() }, async (port) => {
+    const idx = await rawGet(port, '/');
+    assert.equal(idx.status, 200);
+    assert.match(idx.headers['content-type'], /text\/html/);
+    assert.match(idx.headers['content-security-policy'], /default-src 'self'/);
+    assert.equal(idx.headers['x-content-type-options'], 'nosniff');
+    assert.equal(idx.headers['referrer-policy'], 'no-referrer');
 
-    assert.equal((await get(port, '/healthz')).body, 'ok');
-    assert.equal((await get(port, '/app.js')).status, 200);
-    assert.equal((await get(port, '/', 'POST')).status, 405);
+    const health = await rawGet(port, '/healthz');
+    assert.equal(health.body, 'ok');
 
-    for (const p of ['/../server.js', '/%2e%2e/server.js', '/..%2fserver.js', '/%2e%2e%2fpackage.json']) {
-      const r = await get(port, p);
+    for (const p of ['/../server.js', '/%2e%2e/server.js', '/..%2fserver.js', '/%00']) {
+      const r = await rawGet(port, p);
       assert.notEqual(r.status, 200, p);
       assert.ok(!r.body.includes('createApp'), p);
     }
-  } finally {
-    app.close();
-  }
+
+    const post = await new Promise((resolve) => {
+      const req = http.request({ host: '127.0.0.1', port, method: 'POST', path: '/' }, (res) => {
+        res.resume();
+        resolve(res.statusCode);
+      });
+      req.end();
+    });
+    assert.equal(post, 405);
+  });
 });

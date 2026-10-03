@@ -1,297 +1,346 @@
-(() => {
-  'use strict';
+'use strict';
 
-  const CATS = [
-    { max: 50, range: '0–50', name: 'Хорошее', advice: 'Воздух чистый. Гуляйте, занимайтесь спортом, проветривайте квартиру.' },
-    { max: 100, range: '51–100', name: 'Умеренное', advice: 'Воздух приемлемый. Очень чувствительным людям лучше сократить долгие нагрузки на улице.' },
-    { max: 150, range: '101–150', name: 'Вредно для чувствительных', advice: 'Детям, пожилым и людям с астмой или болезнями сердца лучше проводить на улице меньше времени.' },
-    { max: 200, range: '151–200', name: 'Вредное', advice: 'Сократите время на улице и закройте окна. При необходимости наденьте респиратор FFP2 или N95.' },
-    { max: 300, range: '201–300', name: 'Очень вредное', advice: 'Оставайтесь в помещении, включите очиститель воздуха. Выходите только по необходимости.' },
-    { max: Infinity, range: '301+', name: 'Опасное', advice: 'Не выходите без необходимости, закройте окна, включите очиститель воздуха и носите респиратор.' },
+(function () {
+  var REFRESH_MS = 10 * 60 * 1000;
+  var SVG_NS = 'http://www.w3.org/2000/svg';
+
+  var CATEGORIES = [
+    { max: 50, name: 'Хорошее', range: '0–50', advice: 'Воздух чистый. Гуляйте, занимайтесь спортом, проветривайте квартиру.' },
+    { max: 100, name: 'Умеренное', range: '51–100', advice: 'Воздух приемлемый. Очень чувствительным людям лучше сократить долгие нагрузки на улице.' },
+    { max: 150, name: 'Вредно для чувствительных', range: '101–150', advice: 'Детям, пожилым и людям с астмой или болезнями сердца лучше проводить на улице меньше времени.' },
+    { max: 200, name: 'Вредное', range: '151–200', advice: 'Сократите время на улице, закройте окна. При необходимости выходите в респираторе FFP2 или N95.' },
+    { max: 300, name: 'Очень вредное', range: '201–300', advice: 'Оставайтесь в помещении, включите очиститель воздуха. На улицу выходите только по необходимости.' },
+    { max: Infinity, name: 'Опасное', range: '301+', advice: 'Не выходите без необходимости, закройте окна, используйте очиститель воздуха и респиратор.' }
   ];
 
-  const METRICS = [
-    ['pm25', 'PM2.5'], ['pm10', 'PM10'], ['no2', 'NO₂'], ['so2', 'SO₂'], ['o3', 'O₃'], ['co', 'CO'],
-  ];
+  var $ = function (id) { return document.getElementById(id); };
 
-  const MONTHS = ['января', 'февраля', 'марта', 'апреля', 'мая', 'июня', 'июля', 'августа', 'сентября', 'октября', 'ноября', 'декабря'];
-  const MONTHS_SHORT = ['янв', 'фев', 'мар', 'апр', 'мая', 'июн', 'июл', 'авг', 'сен', 'окт', 'ноя', 'дек'];
-  const REFRESH_MS = 10 * 60 * 1000;
-  const SVG_NS = 'http://www.w3.org/2000/svg';
-
-  const $ = (id) => document.getElementById(id);
-  const catIndex = (aqi) => CATS.findIndex((c) => aqi <= c.max);
-
-  // Время приходит по Астане без смещения: "YYYY-MM-DDTHH:MM". Работаем со строками.
-  const dateOf = (t) => t.slice(0, 10);
-  const hourOf = (t) => Number(t.slice(11, 13));
-  const fmtDay = (t) => `${Number(t.slice(8, 10))} ${MONTHS[Number(t.slice(5, 7)) - 1]}`;
-  const fmtDayShort = (t) => `${Number(t.slice(8, 10))} ${MONTHS_SHORT[Number(t.slice(5, 7)) - 1]}`;
-  const fmtHour = (t) => `${t.slice(11, 16)}`;
-  const nextDate = (d) => {
-    const dt = new Date(Date.UTC(+d.slice(0, 4), +d.slice(5, 7) - 1, +d.slice(8, 10) + 1));
-    return dt.toISOString().slice(0, 10);
-  };
-  const fmtNum = (v) => (v == null ? '–' : String(Math.round(v * 10) / 10).replace('.', ','));
-
-  function el(name, attrs, text) {
-    const n = document.createElementNS(SVG_NS, name);
-    for (const k in attrs) n.setAttribute(k, attrs[k]);
-    if (text != null) n.textContent = text;
-    return n;
+  function categoryIndex(aqi) {
+    for (var i = 0; i < CATEGORIES.length; i++) if (aqi <= CATEGORIES[i].max) return i;
+    return CATEGORIES.length - 1;
   }
 
-  function relDay(date, today) {
-    if (date === today) return 'сегодня';
-    if (date === nextDate(today)) return 'завтра';
-    return fmtDay(date);
+  function pad(n) { return n < 10 ? '0' + n : '' + n; }
+
+  // 'YYYY-MM-DDTHH:MM' -> {y, m, d, h, min}
+  function parseTime(s) {
+    var m = /^(\d{4})-(\d{2})-(\d{2})T(\d{2}):(\d{2})/.exec(s || '');
+    if (!m) return null;
+    return { y: +m[1], m: +m[2], d: +m[3], h: +m[4], min: +m[5] };
   }
 
-  // Индекс часа «сейчас» в массиве hourly: последний час, не позже текущего времени.
-  function findNowIndex(hourly, curTime) {
-    const key = curTime.slice(0, 13);
-    let idx = -1;
-    for (let i = 0; i < hourly.length; i++) {
-      if (hourly[i].time.slice(0, 13) <= key) idx = i;
-      else break;
-    }
-    return idx;
+  function dateKey(t) { return t.y + '-' + pad(t.m) + '-' + pad(t.d); }
+
+  function dayDiff(a, b) {
+    return Math.round((Date.UTC(b.y, b.m - 1, b.d) - Date.UTC(a.y, a.m - 1, a.d)) / 86400000);
   }
 
-  function renderScale(active) {
-    const ol = $('scale');
-    ol.textContent = '';
-    CATS.forEach((c, i) => {
-      const li = document.createElement('li');
-      li.dataset.cat = String(i);
-      if (i === active) li.setAttribute('aria-current', 'true');
-      const b = document.createElement('b');
-      b.textContent = `${c.range} · ${c.name}`;
-      const s = document.createElement('span');
-      s.textContent = c.advice;
-      li.append(b, s);
-      ol.append(li);
-    });
+  var MONTHS = ['янв', 'фев', 'мар', 'апр', 'мая', 'июн', 'июл', 'авг', 'сен', 'окт', 'ноя', 'дек'];
+  var fmtDay = function (t) { return t.d + ' ' + MONTHS[t.m - 1]; };
+  var fmtHour = function (t) { return pad(t.h) + ':00'; };
+
+  function fmtNum(v) {
+    if (v === null || v === undefined) return '—';
+    return String(Math.round(v * 10) / 10).replace('.', ',');
   }
 
-  function renderMetrics(cur) {
-    const dl = $('metrics');
-    dl.textContent = '';
-    for (const [key, label] of METRICS) {
-      const d = document.createElement('div');
-      const dt = document.createElement('dt');
-      dt.textContent = label;
-      const dd = document.createElement('dd');
-      dd.textContent = fmtNum(cur[key]);
-      d.append(dt, dd);
-      dl.append(d);
-    }
+  function svgEl(name, attrs) {
+    var el = document.createElementNS(SVG_NS, name);
+    for (var k in attrs) el.setAttribute(k, attrs[k]);
+    return el;
   }
 
-  function renderHero(cur) {
-    const hero = $('hero');
-    if (cur.aqi == null) {
-      $('aqi').textContent = '–';
+  // ---------- Текущее состояние ----------
+
+  function renderCurrent(data) {
+    var cur = data.current;
+    var hero = $('hero');
+    if (cur.aqi === null) {
+      $('aqi').textContent = '—';
       $('cat').textContent = 'Нет данных';
-      $('advice').textContent = 'Источник не передал текущий индекс. Посмотрите график ниже.';
-      hero.dataset.cat = '0';
-      $('haze').style.opacity = '0';
-      $('blurNode').setAttribute('stdDeviation', '0');
-      renderScale(-1);
-      return -1;
+      $('advice').textContent = 'Источник не прислал индекс для этого часа.';
+      hero.style.removeProperty('--cat');
+    } else {
+      var i = categoryIndex(cur.aqi);
+      var cat = CATEGORIES[i];
+      $('aqi').textContent = String(Math.round(cur.aqi));
+      $('cat').textContent = cat.name;
+      $('advice').textContent = cat.advice;
+      hero.style.setProperty('--cat', 'var(--c' + i + ')');
+      renderHaze(cur.aqi);
     }
-    const i = catIndex(cur.aqi);
-    const c = CATS[i];
-    hero.dataset.cat = String(i);
-    $('aqi').textContent = String(Math.round(cur.aqi));
-    $('cat').textContent = c.name;
-    $('advice').textContent = c.advice;
-    // дымка и размытие силуэта растут с индексом
-    const k = Math.min(cur.aqi / 300, 1);
-    $('haze').style.opacity = String(Math.round(k * 0.75 * 100) / 100);
-    $('blurNode').setAttribute('stdDeviation', String(Math.round(k * 4 * 10) / 10));
-    renderScale(i);
-    return i;
+
+    var t = parseTime(cur.time);
+    $('time').textContent = t
+      ? 'Данные на ' + fmtDay(t) + ', ' + pad(t.h) + ':' + pad(t.min) + ' (время Астаны, UTC+5)'
+      : '';
+
+    var items = document.querySelectorAll('#pollutants dd');
+    for (var j = 0; j < items.length; j++) {
+      items[j].textContent = fmtNum(cur[items[j].getAttribute('data-key')]);
+    }
   }
 
-  function renderBest(hourly, nowIdx, curTime) {
-    const out = $('best');
-    let best = null;
-    if (nowIdx >= 0) {
-      for (let i = nowIdx; i < hourly.length && i <= nowIdx + 24; i++) {
-        const p = hourly[i];
-        const h = hourOf(p.time);
-        if (p.aqi == null || h < 7 || h > 21) continue;
-        if (!best || p.aqi < best.aqi) best = p;
-      }
-    }
-    if (!best) {
-      out.textContent = 'В ближайшие 24 часа нет данных для расчёта.';
-      return;
-    }
-    const day = relDay(dateOf(best.time), dateOf(curTime));
-    out.textContent = `${day[0].toUpperCase()}${day.slice(1)} в ${fmtHour(best.time)}: индекс ${Math.round(best.aqi)}, ${CATS[catIndex(best.aqi)].name.toLowerCase()}.`;
+  // Чем выше индекс, тем гуще дымка и мутнее небо.
+  function renderHaze(aqi) {
+    var k = Math.max(0, Math.min(1, aqi / 300));
+    $('haze').style.opacity = String(0.55 * k);
+    $('skyTint').style.opacity = String(0.7 * k);
+    $('blurNode').setAttribute('stdDeviation', String(+(3.5 * k).toFixed(2)));
   }
 
-  function renderChart(hourly, nowIdx) {
-    const box = $('chart');
-    box.textContent = '';
-    const n = hourly.length;
-    if (n < 2) {
-      box.textContent = 'Нет данных для графика.';
-      return;
-    }
-    const W = 960, H = 260, L = 34, R = 8, T = 10, B = 28;
-    const vals = hourly.map((p) => p.aqi).filter((v) => v != null);
-    const yMax = Math.max(150, Math.ceil(Math.max(0, ...vals) / 50) * 50);
-    const x = (i) => L + (i * (W - L - R)) / (n - 1);
-    const y = (v) => T + (1 - Math.min(v, yMax) / yMax) * (H - T - B);
+  // ---------- Лучшее время ----------
 
-    const svg = el('svg', { viewBox: `0 0 ${W} ${H}`, role: 'img', tabindex: '0', 'aria-label': 'График индекса качества воздуха по часам. Стрелки влево и вправо переключают час.' });
+  function renderBest(data) {
+    var now = parseTime(data.current.time);
+    var out = $('best');
+    if (!now) { out.textContent = 'Нет данных.'; return; }
 
-    // фон по категориям
-    let lo = 0;
-    CATS.forEach((c, i) => {
-      if (lo >= yMax) return;
-      const hi = Math.min(c.max === Infinity ? yMax : c.max, yMax);
-      const g = el('rect', { class: 'band', x: L, y: y(hi), width: W - L - R, height: y(lo) - y(hi) });
-      g.dataset.cat = String(i);
-      svg.append(g);
+    var nowKey = dateKey(now) + 'T' + pad(now.h) + ':00';
+    var best = null;
+    var count = 0;
+    data.hourly.forEach(function (p) {
+      var t = parseTime(p.time);
+      if (!t || p.aqi === null || p.time < nowKey || count >= 25) return;
+      count++; // окно: текущий час и 24 следующих
+      if (t.h < 7 || t.h > 21) return;
+      if (!best || p.aqi < best.aqi) best = { aqi: p.aqi, t: t };
+    });
+
+    if (!best) { out.textContent = 'В ближайшие сутки нет подходящих дневных часов с данными.'; return; }
+    var diff = dayDiff(now, best.t);
+    var when = diff === 0 ? 'сегодня' : diff === 1 ? 'завтра' : fmtDay(best.t);
+    var cat = CATEGORIES[categoryIndex(best.aqi)];
+    out.textContent = 'Лучше всего выйти ' + when + ' в ' + fmtHour(best.t) + ': индекс ' +
+      Math.round(best.aqi) + ' (' + cat.name.toLowerCase() + '). Смотрим только дневные часы с 07:00 до 21:00.';
+  }
+
+  // ---------- График ----------
+
+  var chartState = null;
+
+  function renderChart(data) {
+    var svg = $('chart');
+    while (svg.firstChild) svg.removeChild(svg.firstChild);
+
+    var pts = data.hourly;
+    var n = pts.length;
+    if (!n) return;
+
+    var W = 960, H = 220, L = 34, R = 10, T = 10, B = 28;
+    svg.setAttribute('viewBox', '0 0 ' + W + ' ' + H);
+
+    var maxAqi = 150;
+    pts.forEach(function (p) { if (p.aqi !== null && p.aqi > maxAqi) maxAqi = p.aqi; });
+    maxAqi = Math.ceil(maxAqi / 50) * 50;
+
+    var x = function (i) { return L + (n === 1 ? 0 : i * (W - L - R) / (n - 1)); };
+    var y = function (v) { return T + (H - T - B) * (1 - v / maxAqi); };
+
+    // Фон по категориям
+    var lo = 0;
+    CATEGORIES.forEach(function (c, i) {
+      if (lo >= maxAqi) return;
+      var hi = Math.min(c.max === Infinity ? maxAqi : c.max, maxAqi);
+      var r = svgEl('rect', { x: L, width: W - L - R, y: y(hi), height: y(lo) - y(hi) });
+      r.style.fill = 'var(--b' + i + ')';
+      svg.appendChild(r);
       lo = hi;
     });
 
-    // ось Y
-    for (const v of [0, 50, 100, 150, 200, 300].filter((v) => v <= yMax)) {
-      svg.append(el('line', { class: 'axis', x1: L, x2: W - R, y1: y(v), y2: y(v) }));
-      svg.append(el('text', { x: L - 4, y: y(v) + 4, 'text-anchor': 'end' }, String(v)));
+    // Горизонтальные подписи
+    for (var v = 0; v <= maxAqi; v += 50) {
+      var tx = svgEl('text', { x: L - 4, y: y(v) + 4, 'text-anchor': 'end' });
+      tx.textContent = String(v);
+      svg.appendChild(tx);
     }
 
-    // ось X
-    hourly.forEach((p, i) => {
-      const h = hourOf(p.time);
-      if (h % 12 !== 0) return;
-      svg.append(el('text', { x: x(i), y: H - 8, 'text-anchor': i < 6 ? 'start' : 'middle' }, h === 0 ? fmtDayShort(p.time) : '12:00'));
+    // Подписи по оси времени
+    pts.forEach(function (p, i) {
+      var t = parseTime(p.time);
+      if (!t || t.h % 12 !== 0) return;
+      var line = svgEl('line', { x1: x(i), x2: x(i), y1: T, y2: H - B });
+      line.style.stroke = 'var(--line)';
+      svg.appendChild(line);
+      var lab = svgEl('text', { x: x(i), y: H - 8, 'text-anchor': 'middle' });
+      lab.textContent = t.h === 0 ? fmtDay(t) : '12:00';
+      svg.appendChild(lab);
     });
 
-    // линия: прерывается на пропусках
-    const path = (from, to) => {
-      let d = '';
-      let pen = false;
-      for (let i = from; i <= to; i++) {
-        const v = hourly[i].aqi;
-        if (v == null) { pen = false; continue; }
-        d += `${pen ? 'L' : 'M'}${x(i).toFixed(1)} ${y(v).toFixed(1)} `;
+    var nowIdx = -1;
+    var nowT = parseTime(data.current.time);
+    if (nowT) {
+      var key = dateKey(nowT) + 'T' + pad(nowT.h) + ':00';
+      nowIdx = pts.findIndex(function (p) { return p.time === key; });
+    }
+
+    // Линии: прошлое сплошной, прогноз пунктиром, пропуски разрывают линию
+    function segPath(from, to) {
+      var d = '', pen = false;
+      for (var i = from; i <= to && i < n; i++) {
+        if (pts[i].aqi === null) { pen = false; continue; }
+        d += (pen ? 'L' : 'M') + x(i).toFixed(1) + ' ' + y(pts[i].aqi).toFixed(1);
         pen = true;
       }
-      return d.trim();
-    };
-    const split = nowIdx >= 0 ? nowIdx : -1;
-    const pastD = split >= 0 ? path(0, split) : '';
-    const futD = path(Math.max(split, 0), n - 1);
-    if (pastD) svg.append(el('path', { class: 'line past', d: pastD }));
-    if (futD) svg.append(el('path', { class: 'line fut', d: futD }));
-
-    // отметка «сейчас»
-    if (nowIdx >= 0) {
-      svg.append(el('line', { class: 'nowline', x1: x(nowIdx), x2: x(nowIdx), y1: T, y2: H - B }));
-      svg.append(el('text', { x: x(nowIdx) + 4, y: T + 10 }, 'сейчас'));
-      if (hourly[nowIdx].aqi != null) svg.append(el('circle', { class: 'nowdot', cx: x(nowIdx), cy: y(hourly[nowIdx].aqi), r: 4.5 }));
+      return d;
+    }
+    var split = nowIdx < 0 ? n - 1 : nowIdx;
+    var past = svgEl('path', { d: segPath(0, split), fill: 'none', 'stroke-width': 2.5, 'stroke-linejoin': 'round' });
+    past.style.stroke = 'var(--text)';
+    svg.appendChild(past);
+    if (nowIdx >= 0 && nowIdx < n - 1) {
+      var fc = svgEl('path', { d: segPath(nowIdx, n - 1), fill: 'none', 'stroke-width': 2.5, 'stroke-dasharray': '6 5', 'stroke-linejoin': 'round' });
+      fc.style.stroke = 'var(--text)';
+      svg.appendChild(fc);
     }
 
-    const hoverLine = el('line', { class: 'hoverline', y1: T, y2: H - B, visibility: 'hidden' });
-    const hoverDot = el('circle', { class: 'hoverdot', r: 4, visibility: 'hidden' });
-    svg.append(hoverLine, hoverDot);
-
-    const tip = $('tip');
-    let sel = nowIdx >= 0 ? nowIdx : 0;
-
-    function show(i) {
-      sel = Math.max(0, Math.min(n - 1, i));
-      const p = hourly[sel];
-      hoverLine.setAttribute('x1', x(sel));
-      hoverLine.setAttribute('x2', x(sel));
-      hoverLine.setAttribute('visibility', 'visible');
-      if (p.aqi != null) {
-        hoverDot.setAttribute('cx', x(sel));
-        hoverDot.setAttribute('cy', y(p.aqi));
-        hoverDot.setAttribute('visibility', 'visible');
-      } else {
-        hoverDot.setAttribute('visibility', 'hidden');
-      }
-      const when = sel === nowIdx ? 'сейчас' : sel > nowIdx ? 'прогноз' : 'было';
-      const head = `${fmtDay(p.time)}, ${fmtHour(p.time)} (${when})`;
-      tip.textContent = p.aqi == null
-        ? `${head}: нет данных.`
-        : `${head}: индекс ${Math.round(p.aqi)}, ${CATS[catIndex(p.aqi)].name.toLowerCase()}, PM2.5 ${fmtNum(p.pm25)} мкг/м³.`;
+    // Отметка «сейчас»
+    if (nowIdx >= 0 && pts[nowIdx].aqi !== null) {
+      var dot = svgEl('circle', { cx: x(nowIdx), cy: y(pts[nowIdx].aqi), r: 5 });
+      dot.style.fill = 'var(--accent)';
+      dot.style.stroke = 'var(--card)';
+      dot.setAttribute('stroke-width', '2');
+      svg.appendChild(dot);
     }
 
-    const fromEvent = (e) => {
-      const r = svg.getBoundingClientRect();
-      const vx = ((e.clientX - r.left) / r.width) * W;
-      return Math.round(((vx - L) / (W - L - R)) * (n - 1));
-    };
-    svg.addEventListener('pointermove', (e) => show(fromEvent(e)));
-    svg.addEventListener('pointerdown', (e) => show(fromEvent(e)));
-    svg.addEventListener('keydown', (e) => {
-      const step = e.key === 'ArrowLeft' ? -1 : e.key === 'ArrowRight' ? 1 : e.key === 'PageUp' ? -24 : e.key === 'PageDown' ? 24 : 0;
-      if (!step) return;
+    // Курсор
+    var cursor = svgEl('line', { y1: T, y2: H - B, visibility: 'hidden' });
+    cursor.style.stroke = 'var(--accent)';
+    svg.appendChild(cursor);
+
+    chartState = { data: data, x: x, nowIdx: nowIdx, cursor: cursor, W: W, L: L, R: R, sel: nowIdx >= 0 ? nowIdx : n - 1 };
+  }
+
+  function showPoint(i) {
+    var s = chartState;
+    if (!s) return;
+    var pts = s.data.hourly;
+    i = Math.max(0, Math.min(pts.length - 1, i));
+    s.sel = i;
+    var p = pts[i];
+    var t = parseTime(p.time);
+    s.cursor.setAttribute('x1', s.x(i));
+    s.cursor.setAttribute('x2', s.x(i));
+    s.cursor.setAttribute('visibility', 'visible');
+
+    var tag = i === s.nowIdx ? ', сейчас' : (s.nowIdx >= 0 && i > s.nowIdx ? ', прогноз' : '');
+    var head = fmtDay(t) + ', ' + fmtHour(t) + tag + ': ';
+    if (p.aqi === null) {
+      $('tip').textContent = head + 'нет данных.';
+      return;
+    }
+    $('tip').textContent = head + 'индекс ' + Math.round(p.aqi) + ' (' + CATEGORIES[categoryIndex(p.aqi)].name +
+      '), PM2.5 ' + fmtNum(p.pm25) + ' мкг/м³';
+  }
+
+  function bindChartEvents() {
+    var svg = $('chart');
+    function fromEvent(e) {
+      var s = chartState;
+      if (!s) return;
+      var rect = svg.getBoundingClientRect();
+      var px = (e.clientX - rect.left) * (s.W / rect.width);
+      var n = s.data.hourly.length;
+      showPoint(Math.round((px - s.L) / ((s.W - s.L - s.R) / (n - 1))));
+    }
+    svg.addEventListener('pointermove', fromEvent);
+    svg.addEventListener('pointerdown', fromEvent);
+    svg.addEventListener('keydown', function (e) {
+      var s = chartState;
+      if (!s) return;
+      var step = { ArrowLeft: -1, ArrowRight: 1, PageUp: -24, PageDown: 24 }[e.key];
+      if (step === undefined) return;
       e.preventDefault();
-      show(sel + step);
+      showPoint(s.sel + step);
     });
+  }
 
-    box.append(svg);
+  // ---------- Шкала ----------
+
+  function renderScale(aqi) {
+    var ul = $('scale');
+    var cur = aqi === null || aqi === undefined ? -1 : categoryIndex(aqi);
+    ul.textContent = '';
+    CATEGORIES.forEach(function (c, i) {
+      var li = document.createElement('li');
+      li.style.setProperty('--cat', 'var(--c' + i + ')');
+      if (i === cur) li.className = 'current';
+      var strong = document.createElement('strong');
+      strong.textContent = c.name;
+      var range = document.createElement('span');
+      range.className = 'range';
+      range.textContent = ' · ' + c.range;
+      li.appendChild(strong);
+      li.appendChild(range);
+      if (i === cur) {
+        var here = document.createElement('span');
+        here.className = 'here';
+        here.textContent = 'Сейчас';
+        li.appendChild(here);
+      }
+      var p = document.createElement('div');
+      p.textContent = c.advice;
+      li.appendChild(p);
+      ul.appendChild(li);
+    });
+  }
+
+  // ---------- Загрузка ----------
+
+  var lastData = null;
+
+  function setStatus(text, warn) {
+    var el = $('status');
+    el.textContent = text;
+    el.className = 'status' + (warn ? ' warn' : '');
+  }
+
+  function showError(show) {
+    $('error').hidden = !show;
   }
 
   function render(data) {
-    // значение «сейчас» на графике совпадает с крупным числом
-    const hourly = data.hourly.map((p) => ({ ...p }));
-    const nowIdx = findNowIndex(hourly, data.current.time);
-    if (nowIdx >= 0) {
-      if (data.current.aqi != null) hourly[nowIdx].aqi = data.current.aqi;
-      if (data.current.pm25 != null) hourly[nowIdx].pm25 = data.current.pm25;
-    }
-
-    renderHero(data.current);
-    renderMetrics(data.current);
-    renderChart(hourly, nowIdx);
-    renderBest(hourly, nowIdx, data.current.time);
-
-    $('stale').hidden = !data.stale;
-    $('updated').textContent = `Данные на ${fmtHour(data.current.time)}, ${fmtDay(data.current.time)} (время Астаны). Источник: ${data.source}.`;
-    $('error').hidden = true;
-    $('content').hidden = false;
-    $('tip').textContent = 'Проведите пальцем или мышью по графику, чтобы увидеть значение.';
-  }
-
-  let loading = false;
-  let hasData = false;
-
-  async function load() {
-    if (loading) return;
-    loading = true;
-    try {
-      const res = await fetch('/api/air', { headers: { Accept: 'application/json' } });
-      if (!res.ok) throw new Error(String(res.status));
-      render(await res.json());
-      hasData = true;
-    } catch (err) {
-      if (hasData) {
-        $('stale').hidden = false;
-      } else {
-        $('content').hidden = true;
-        $('error').hidden = false;
-        $('updated').textContent = 'Данных нет.';
-      }
-    } finally {
-      loading = false;
+    lastData = data;
+    showError(false);
+    renderCurrent(data);
+    renderBest(data);
+    renderChart(data);
+    showPoint(chartState ? chartState.sel : 0);
+    renderScale(data.current.aqi);
+    $('src-meta').textContent = 'Источник: ' + data.source + '. Обновлено на сервере: ' +
+      new Date(data.fetchedAt).toLocaleString('ru-RU', { timeZone: 'Asia/Almaty' }) + '.';
+    if (data.stale) {
+      setStatus('Источник недоступен, показаны сохранённые данные', true);
+    } else {
+      setStatus('Данные актуальны', false);
     }
   }
 
-  $('retry').addEventListener('click', () => {
-    $('updated').textContent = 'Загружаем данные…';
+  function load() {
+    return fetch('/api/air', { headers: { Accept: 'application/json' } })
+      .then(function (res) {
+        if (!res.ok) throw new Error('HTTP ' + res.status);
+        return res.json();
+      })
+      .then(render)
+      .catch(function () {
+        if (lastData) {
+          setStatus('Не удалось обновить, показаны предыдущие данные', true);
+        } else {
+          setStatus('Нет данных', true);
+          showError(true);
+        }
+      });
+  }
+
+  document.addEventListener('DOMContentLoaded', function () {
+    renderScale(null);
+    bindChartEvents();
+    $('retry').addEventListener('click', function () {
+      setStatus('Загружаем данные…', false);
+      load();
+    });
     load();
+    setInterval(load, REFRESH_MS);
   });
-
-  load();
-  setInterval(load, REFRESH_MS);
 })();
